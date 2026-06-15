@@ -1,6 +1,6 @@
 ---
 name: railway-deploy
-description: Deploy a service to Railway and debug a failing deploy. Covers service setup, Dockerfile vs Nixpacks, environment variables, PORT binding, Postgres provisioning, migration-in-start, and monorepo root directories. Battle-tested on the STIZ NestJS backend deploy (2026-06-15).
+description: Deploy a service to Railway and debug a failing deploy. Covers service setup, Dockerfile vs Nixpacks, environment variables, PORT binding, Postgres provisioning, migration-in-start, and monorepo root directories. Battle-tested on real NestJS + Prisma deployments.
 ---
 
 # Deploy to Railway
@@ -68,8 +68,9 @@ Set these on the **backend service** (not the Postgres service):
 | `JWT_SECRET` | Generate with `openssl rand -hex 32` |
 | `ENCRYPTION_KEY` | 32-byte hex — generate with `openssl rand -hex 32` |
 | `PAYSTACK_SECRET_KEY` | From Paystack dashboard |
-| `GOOGLE_CLIENT_ID` | Use `placeholder` until real OAuth creds are ready — prevents startup crash |
+| `GOOGLE_CLIENT_ID` | Use `placeholder` until real OAuth creds are ready — prevents startup crash (passport-google-oauth20 validates clientID at module init) |
 | `GOOGLE_CLIENT_SECRET` | Use `placeholder` until real OAuth creds are ready |
+| Any other required vars | Check startup logs — NestJS/ConfigService will throw the missing var name |
 
 **Critical:** Variables must be set on the correct service. If you delete and recreate the Postgres service (e.g. to fix a crash loop), the variables on the backend service remain — but `DATABASE_URL` must be re-pointed to the new Postgres reference variable.
 
@@ -80,7 +81,7 @@ Set these on the **backend service** (not the Postgres service):
 - A successful build with a crashing start is a runtime/env problem, not a build one.
 - Railway's free-tier Postgres can crash if the app hits it with too many failed connections in a loop — if the DB goes red, delete and recreate it.
 
-## Battle-tested errors (STIZ backend, 2026-06-15)
+## Battle-tested errors (NestJS + Prisma + Alpine)
 
 ### 1. Prisma / OpenSSL missing on Alpine
 **Symptom:** `migrate deploy` or the app crashes with "Could not parse schema engine response" or a binary execution error. Build succeeds, deploy fails immediately.
