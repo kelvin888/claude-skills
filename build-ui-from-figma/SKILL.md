@@ -1,5 +1,5 @@
 ---
-name: build-ui-figma
+name: build-ui-from-figma
 description: Build a UI screen pixel-perfect from one or more Figma frames. Fetches all frames via the Figma MCP, extracts colors/typography/spacing/assets/states, downloads icon assets, then follows the build-ui-from-design method. Use when the user provides Figma URLs and asks to build, implement, or match a screen.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: spec-authoring
+name: write-spec
 description: Use this skill whenever a senior or domain expert needs to write a feature specification to hand off to another engineer (often a junior) to implement, or when anyone says "write a spec", "spec this out", "create a feature spec", "hand-off doc", "implementation spec", or is about to delegate a coding task. Also trigger when someone describes a feature or schema change they want built by someone else, even if they don't use the word "spec". Produces a structured, locked/open, EARS-based spec from the FEATURE_SPEC_TEMPLATE that a junior + Claude Code can implement with minimal back-and-forth. Stack-agnostic — detects the project's stack from CLAUDE.md/agents.md or asks the author.
 ---
 

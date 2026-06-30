@@ -1,5 +1,5 @@
 ---
-name: railway-deploy
+name: deploy-to-railway
 description: Deploy a service to Railway and debug a failing deploy. Covers service setup, Dockerfile vs Nixpacks, environment variables, PORT binding, Postgres provisioning, migration-in-start, and monorepo root directories. Battle-tested on real NestJS + Prisma deployments.
 ---
 

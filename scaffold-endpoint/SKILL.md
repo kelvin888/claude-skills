@@ -1,5 +1,5 @@
 ---
-name: nest-endpoint-scaffold
+name: scaffold-endpoint
 description: Scaffold a new REST endpoint in a NestJS backend. Use when adding routes to an existing module, when the user says "scaffold endpoint", "add endpoint", "new route", or when building out controllers/services/repositories together. Covers model/schema → repository → DTO → service → controller in one pass. Stack-agnostic — reads CLAUDE.md first, asks about ORM/DB/auth if not found.
 ---
 
@@ -38,7 +38,7 @@ and services grow HTTP awareness.
 3. **DTO** — input validation + API documentation shape
 4. **Service** — pure business logic, throws typed errors
 5. **Controller** — HTTP parsing only, delegates to service
-6. **Integration test** — invoke the `nest-integration-test` skill
+6. **Integration test** — invoke the `write-integration-test` skill
 
 ```
 Controller   →   parses HTTP, calls service, returns result. NO logic.
@@ -252,5 +252,5 @@ where permissions are managed.
 - [ ] Service throws typed error classes, not raw `Error`
 - [ ] Controller has `@ApiOperation` + `@ApiResponse` on every method (if project uses Swagger)
 - [ ] No `new ClassName()` in services or controllers — everything injected via DI
-- [ ] Integration test exists (invoke `nest-integration-test` skill)
+- [ ] Integration test exists (invoke `write-integration-test` skill)
 - [ ] `build`, `lint`, and `test` all green

@@ -1,5 +1,5 @@
 ---
-name: nest-integration-test
+name: write-integration-test
 description: Write a NestJS integration test that exercises a controller end-to-end with the full pipeline — guards, pipes, filters, interceptors. Use when adding a `.integration.spec.ts` file, when the user says "integration test", "write test", "test the endpoint", or when scaffolding tests for a new controller. Stack-agnostic — reads CLAUDE.md first, asks about DB/auth strategy if not found. Covers harness setup, seed handling, auth helpers, and common gotchas.
 ---
 

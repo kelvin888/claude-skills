@@ -1,14 +1,14 @@
 ---
 name: build-ui-from-design
-description: Build a UI screen or component pixel-perfect from any design source — the platform-agnostic method. Get the real design spec (don't eyeball), map every value to design-system tokens, build the real element structure, then verify by actively bug-hunting the rendered result against the source. Use when the user provides a design reference and asks to build, implement, match, or make a screen "pixel-perfect". For tool specifics, pair with build-ui-figma or build-ui-stitch.
+description: Build a UI screen or component pixel-perfect from any design source — the platform-agnostic method. Get the real design spec (don't eyeball), map every value to design-system tokens, build the real element structure, then verify by actively bug-hunting the rendered result against the source. Use when the user provides a design reference and asks to build, implement, match, or make a screen "pixel-perfect". For tool specifics, pair with build-ui-from-figma or build-ui-from-stitch.
 ---
 
 # Build UI from a design source (core method)
 
 The method that's true regardless of design tool or framework. Platform-specific
-fetching lives in the adapter skills (`build-ui-figma`, `build-ui-stitch`); the
+fetching lives in the adapter skills (`build-ui-from-figma`, `build-ui-from-stitch`); the
 discipline below does not change. If the project has its own UI-build skill or
-conventions (e.g. `tradeaxis-build-ui`, a `CLAUDE.md`), those take precedence — this
+conventions (e.g. a project-specific `CLAUDE.md`), those take precedence — this
 layers on top.
 
 See also the repo's `AGENTS.md`: "Verify, don't confirm" and "No raw hex — use tokens".
@@ -38,8 +38,8 @@ to Step 1. This is the gate that separates distinctive products from generic Saa
 A screenshot hides exact radius, padding, fill, borders, focus/hover/error states, and
 whether a control is one element or several joined ones. Get the underlying spec via the
 right adapter:
-- **Figma** → `build-ui-figma` (Figma MCP `get_design_context`).
-- **Google Stitch** → `build-ui-stitch` (fetch the screen's HTML export, read its classes).
+- **Figma** → `build-ui-from-figma` (Figma MCP `get_design_context`).
+- **Google Stitch** → `build-ui-from-stitch` (fetch the screen's HTML export, read its classes).
 - **Other tool with inspect/export** → read the inspected CSS or exported markup.
 - **Only a screenshot exists** → say so explicitly, extract what you can, and flag that
   exact values are estimated and need confirmation.

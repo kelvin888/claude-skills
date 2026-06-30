@@ -63,7 +63,7 @@ If the feature has no UI (pure backend, infra, data pipeline), skip to Phase 3.
 
 ## Phase 3 — Spec
 
-**Invoke: `/spec-authoring`**
+**Invoke: `/write-spec`**
 
 Turn the creative brief and the author's intent into a structured feature spec. The spec
 is what the implementer builds to — not the brief, not a Slack message, not memory.
@@ -103,7 +103,7 @@ LOCKED decisions or Sec11 blockers before Phase 5 begins.
 
 ## Phase 5 — Issues
 
-**Invoke: `/to-issues`**
+**Invoke: `/breakdown-to-issues`**
 
 Break the approved spec into independently-grabbable issues on the project tracker.
 Use tracer-bullet vertical slices — each issue delivers working, tested, reviewable
@@ -126,14 +126,14 @@ Each issue must include:
 Work each issue through the right sub-skills. Every issue follows this mini-pipeline:
 
 ### If backend work
-1. **`/nest-endpoint-scaffold`** (or equivalent) — scaffold the endpoint
+1. **`/scaffold-endpoint`** (or equivalent) — scaffold the endpoint
 2. **`/tdd`** — write failing tests first, then implementation
-3. **`/nest-integration-test`** — integration test covering happy path, auth, validation,
+3. **`/write-integration-test`** — integration test covering happy path, auth, validation,
    cross-tenant isolation
 
 ### If UI work
 1. **`/creative-director`** brief is already approved — reference it throughout
-2. **`/build-ui-figma`** or **`/build-ui-stitch`** or **`/build-ui-from-design`** — the
+2. **`/build-ui-from-figma`** or **`/build-ui-from-stitch`** or **`/build-ui-from-design`** — the
    Creative Brief gate in these skills enforces the brief is present before building
 3. Verify: active bug-hunt against design source AND against the Creative Brief
 
@@ -162,7 +162,7 @@ Walk the spec methodically against the PR (per spec-authoring Sec9 review checkl
 Do not approve on vibe. Every L, every R, every test must map.
 
 ### Deploy
-**Invoke: `/railway-deploy`** (or the project's deploy skill)
+**Invoke: `/deploy-to-railway`** (or the project's deploy skill)
 
 Deploy only after the review is approved and all checks are green.
 
@@ -186,8 +186,8 @@ this skill:
 |---|---|---|
 | 1 — Foundation | (manual) | `architecture-brief.md` + `CLAUDE.md` |
 | 2 — Creative Direction | `/creative-director` | `.creative-brief.md` (author approved) |
-| 3 — Spec | `/spec-authoring` | `{SLUG}_SPEC.md` at `READY FOR IMPL` |
+| 3 — Spec | `/write-spec` | `{SLUG}_SPEC.md` at `READY FOR IMPL` |
 | 4 — Stress Test | `/grill-me` | Revised spec, author confirms ready |
-| 5 — Issues | `/to-issues` | Issues on tracker, assignees set |
-| 6 — Implement | `/nest-endpoint-scaffold`, `/build-ui-*`, `/tdd` | PR with Sec9 self-check, green CI |
-| 7 — Review + Deploy | `/code-review`, `/railway-deploy` | Approved PR, live deploy |
+| 5 — Issues | `/breakdown-to-issues` | Issues on tracker, assignees set |
+| 6 — Implement | `/scaffold-endpoint`, `/build-ui-*`, `/tdd` | PR with Sec9 self-check, green CI |
+| 7 — Review + Deploy | `/code-review`, `/deploy-to-railway` | Approved PR, live deploy |

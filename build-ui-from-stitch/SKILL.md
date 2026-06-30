@@ -1,5 +1,5 @@
 ---
-name: build-ui-stitch
+name: build-ui-from-stitch
 description: Build a UI screen pixel-perfect from a Google Stitch design. Identifies the right Stitch project/board, fetches the screen's real HTML export, reads the actual Tailwind classes + theme tokens (never eyeballs the screenshot), then follows the build-ui-from-design method. Use when the user references a Stitch design/board/screen and asks to build, implement, or match a screen.
 ---
 
