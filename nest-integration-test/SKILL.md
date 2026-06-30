@@ -1,21 +1,39 @@
 ---
 name: nest-integration-test
-description: Write a NestJS integration test using mongodb-memory-server + supertest, following the TradeAxis backend conventions. Use when adding a `.integration.spec.ts` file, when the user says "integration test", "write test", "test the endpoint", or when scaffolding tests for a new controller. Covers harness setup, seed handling, auth helpers, and the gotchas that bite (422 vs 400, duplicate-seed race, supertest typing).
+description: Write a NestJS integration test that exercises a controller end-to-end with the full pipeline — guards, pipes, filters, interceptors. Use when adding a `.integration.spec.ts` file, when the user says "integration test", "write test", "test the endpoint", or when scaffolding tests for a new controller. Stack-agnostic — reads CLAUDE.md first, asks about DB/auth strategy if not found. Covers harness setup, seed handling, auth helpers, and common gotchas.
 ---
 
 # Nest Integration Test
 
 Builds a single `*.integration.spec.ts` file that exercises a controller end-to-end
-against a real MongoDB (in-memory) with the full NestJS pipeline — guards, pipes,
-filters, interceptors. No mocks of internal collaborators.
+against a real database with the full NestJS pipeline. No mocks of internal collaborators.
+
+## Step 0 — Detect the test strategy before writing anything
+
+Read `CLAUDE.md` / `agents.md` and the existing test files to derive:
+
+| Question | Where to look | If not found |
+|---|---|---|
+| Test DB approach | Existing `*.integration.spec.ts`, `package.json` devDeps | Ask: "mongodb-memory-server, pg test container, SQLite in-memory, or test DB URL?" |
+| Auth strategy | Existing guards, test auth helpers | Ask: "How do tests authenticate — signup flow, seeded token, mock JWT, API key?" |
+| Seed approach | Existing `beforeAll` in spec files, seed services | Ask: "Does the app auto-seed on module init, or do tests seed manually?" |
+| Global prefix | `main.ts` | Read it — prefix must match what tests send |
+| Global pipes/filters/interceptors | `main.ts` | Mirror them in the harness exactly |
+
+Check `package.json` for which testing library the project uses (Jest vs Vitest). The
+skeleton below uses Jest — adapt `describe/it/beforeAll/afterAll` to Vitest if needed.
+
+---
 
 ## Philosophy
 
 These are **behavioural tests**. They send HTTP, assert HTTP. They don't poke at
-services or repositories directly. If you find yourself injecting `RolesService` to
-call methods, stop — that's a unit test, write that separately and keep it small.
+services or repositories directly. If you're injecting a service to call its methods,
+that's a unit test — keep it separate and small.
 
 Integration tests survive refactors because they only know the public surface.
+
+---
 
 ## File location
 
@@ -23,205 +41,213 @@ Integration tests survive refactors because they only know the public surface.
 src/modules/{module}/{feature}/{feature}.integration.spec.ts
 ```
 
-Co-located with the controller it tests. Jest finds it via the default `*.spec.ts`
-glob.
+Co-located with the controller it tests.
 
-## The harness skeleton (copy and adapt)
+---
+
+## The harness skeleton
 
 ```typescript
+// Disable the lint rule that fires on supertest's loose `any` types
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-// ^ supertest's request(server) types are loose; this disable goes at the file top.
 
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import cookieParser from 'cookie-parser'
-import { MongoMemoryServer } from 'mongodb-memory-server'
-import mongoose from 'mongoose'
 import request from 'supertest'
 import { AppModule } from '@/app.module'
-import { GlobalExceptionFilter } from '@/shared/filters/http-exception.filter'
-import { ResponseTransformInterceptor } from '@/shared/interceptors/response-transform.interceptor'
 
-describe('RolesController (integration)', () => {
+// ── DB teardown helpers (pick the one that matches your stack) ──────────────
+// MongoDB:   import { MongoMemoryServer } from 'mongodb-memory-server'
+//            import mongoose from 'mongoose'
+// PostgreSQL test container / SQLite: add your teardown client here
+
+describe('{Feature}Controller (integration)', () => {
   let app: INestApplication
-  let mongo: MongoMemoryServer
+  // let mongo: MongoMemoryServer  // MongoDB only
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create()
-    process.env.MONGODB_URI = mongo.getUri()
-    process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long-xxxxxx'
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-at-least-32-chars-long-xxx'
+    // ── 1. Start test database ────────────────────────────────────────────
+    // MongoDB:
+    //   mongo = await MongoMemoryServer.create()
+    //   process.env.MONGODB_URI = mongo.getUri()
+    //
+    // PostgreSQL in-memory / SQLite:
+    //   set process.env.DATABASE_URL to your test DB before module init
 
+    // ── 2. Set required env vars BEFORE createTestingModule ──────────────
+    // The module reads env at init time — set everything first.
+    // process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long'
+    // Add any other secrets your app reads at startup
+
+    // ── 3. Boot the app ──────────────────────────────────────────────────
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile()
 
     app = moduleRef.createNestApplication()
-    app.setGlobalPrefix('v1')
-    app.use(cookieParser())
+
+    // Mirror main.ts exactly — missing any of these causes hard-to-debug failures:
+    // app.setGlobalPrefix('v1')            // if main.ts sets a prefix
+    // app.use(cookieParser())              // if main.ts uses cookie-parser
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
         transform: true,
-        errorHttpStatusCode: 422, // CRITICAL: default is 400; we want 422
+        // Use the same errorHttpStatusCode as main.ts — often 422, not the 400 default
       }),
     )
-    app.useGlobalFilters(new GlobalExceptionFilter())
-    app.useGlobalInterceptors(new ResponseTransformInterceptor())
+    // app.useGlobalFilters(new YourExceptionFilter())
+    // app.useGlobalInterceptors(new YourResponseInterceptor())
 
     await app.init()
-    // DO NOT call seed.seed() here — IdentitySeedService.onModuleInit awaits the seed
-    // already. Calling it twice triggers E11000 duplicate key.
+
+    // ── 4. Seed if the app does NOT auto-seed on module init ─────────────
+    // If the app seeds via onModuleInit, do NOT call seed() again here —
+    // calling it twice causes duplicate-key errors.
+    // If tests need explicit seeding:
+    //   const seeder = app.get(YourSeederService)
+    //   await seeder.seed()
   })
 
   afterAll(async () => {
     await app.close()
-    await mongoose.disconnect()
-    await mongo.stop()
+    // MongoDB:   await mongoose.disconnect(); await mongo.stop()
+    // Prisma:    prisma.$disconnect() if you injected it
+    // TypeORM:   dataSource.destroy()
   })
 
-  // tests go here
+  // ── Tests go here ─────────────────────────────────────────────────────────
 })
 ```
 
-## Why each line matters (don't skip)
+---
 
-- **`process.env.MONGODB_URI = mongo.getUri()` BEFORE `Test.createTestingModule`** —
-  `MongooseModule.forRoot` reads the env at module init. Set it first.
-- **`process.env.JWT_SECRET`** — `JwtModule.register` reads it; tests fail with
-  cryptic 500s if missing.
-- **`app.setGlobalPrefix('v1')`** — production sets this in `main.ts`. Without it,
-  tests would have to use `/auth/signup` instead of `/v1/auth/signup` and drift from
-  production behaviour.
-- **`cookieParser()`** — refresh tokens come back as httpOnly cookies; tests that
-  exercise `/v1/auth/refresh` need this or the cookie is invisible.
-- **`errorHttpStatusCode: 422`** — the project convention is 422 for validation
-  errors, not the NestJS default 400. Forgetting this gives "expected 422, got 400"
-  failures that look like a test bug but are actually a setup bug.
-- **`useGlobalFilters` + `useGlobalInterceptors`** — `main.ts` registers these; tests
-  must mirror it. Without the filter, `AppError` subclasses return 500. Without the
-  interceptor, responses come back as raw objects (no `data` wrapper) and assertions
-  fail.
-- **`/* eslint-disable @typescript-eslint/no-unsafe-argument */`** — `app.getHttpServer()`
-  returns `any`; supertest's `request(server)` then types as `any` too. The lint rule
-  fires on every call. Disable at file top, not per-line.
+## Auth helper
 
-## Test shape (one per behaviour)
+Adapt this to the project's actual auth endpoints and request shape:
 
 ```typescript
-it('creates a custom role and returns 201 with the role summary', async () => {
-  const { token } = await signupAndLogin('owner@acme.com', 'importer')
-
+async function authenticate(
+  email = 'test@example.com',
+  // Add any other fields your signup/login endpoint requires
+): Promise<{ token: string; userId: string }> {
+  // Option A — signup + login flow (most common)
   const res = await request(app.getHttpServer())
-    .post('/v1/organizations/me/roles')
-    .set('Authorization', `Bearer ${token}`)
-    .send({
-      name: 'Procurement Officer',
-      permissions: ['procurement.rfq.create', 'procurement.rfq.view'],
-    })
-    .expect(201)
-
-  expect(res.body.data).toMatchObject({
-    name: 'Procurement Officer',
-    permissions: expect.arrayContaining(['procurement.rfq.create']),
-    isSystem: false,
-  })
-  expect(res.body.data.id).toBeDefined()
-})
-
-it('rejects a role with permissions outside the org group with 403', async () => {
-  const { token } = await signupAndLogin('owner@acme.com', 'importer')
-
-  await request(app.getHttpServer())
-    .post('/v1/organizations/me/roles')
-    .set('Authorization', `Bearer ${token}`)
-    .send({ name: 'Admin Smuggler', permissions: ['admin.platform.manage'] })
-    .expect(403)
-})
-```
-
-**Assert on `res.body.data`** — never `res.body` directly. The interceptor wraps it.
-Errors come back as `res.body.error`.
-
-## Auth helper (paste into the spec, or into a shared `test-helpers.ts`)
-
-```typescript
-async function signupAndLogin(
-  email: string,
-  group: 'importer' | 'supplier' | 'admin' = 'importer',
-): Promise<{ token: string; userId: string; organizationId: string }> {
-  const signup = await request(app.getHttpServer())
-    .post('/v1/auth/signup')
-    .send({
-      email,
-      password: 'P@ssw0rd-test-2026',
-      name: 'Test User',
-      organizationName: 'Test Org',
-      group,
-      country: 'NG',
-    })
+    .post('/v1/auth/signup')          // change to your auth path
+    .send({ email, password: 'Test@1234', /* other required fields */ })
     .expect(201)
 
   return {
-    token: signup.body.data.accessToken,
-    userId: signup.body.data.user.id,
-    organizationId: signup.body.data.user.organizationId,
+    token: res.body.data?.accessToken ?? res.body.accessToken,
+    userId: res.body.data?.user?.id   ?? res.body.id,
   }
+
+  // Option B — if tests use a pre-seeded user and a login endpoint instead
+  // const res = await request(app.getHttpServer())
+  //   .post('/v1/auth/login')
+  //   .send({ email, password: 'seeded-password' })
+  //   .expect(200)
+  // return { token: res.body.data.accessToken, userId: res.body.data.user.id }
 }
 ```
 
-If your endpoint requires a specific permission the default role doesn't include
-(e.g. testing as a non-owner), do a second signup + invite + accept flow rather than
-manually mutating roles. Tests should use the same paths users do.
+---
 
-## Status-code assertions cheat sheet
+## Test shape — minimum coverage per endpoint
 
-| What you're testing | `.expect(...)` |
+```typescript
+it('returns 201 and the created resource on valid input', async () => {
+  const { token } = await authenticate()
+
+  const res = await request(app.getHttpServer())
+    .post('/v1/{resource}')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Test item' })
+    .expect(201)
+
+  expect(res.body.data).toMatchObject({ name: 'Test item' })
+  expect(res.body.data.id).toBeDefined()
+})
+
+it('returns 401 when no token is provided', async () => {
+  await request(app.getHttpServer())
+    .post('/v1/{resource}')
+    .send({ name: 'Test item' })
+    .expect(401)
+})
+
+it('returns 403 when the caller lacks the required permission', async () => {
+  const { token } = await authenticate('low-perm@example.com')
+  await request(app.getHttpServer())
+    .post('/v1/{resource}')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Test item' })
+    .expect(403)
+})
+
+it('returns a validation error on bad input', async () => {
+  const { token } = await authenticate()
+  await request(app.getHttpServer())
+    .post('/v1/{resource}')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: '' })         // violates @Length(2, 80)
+    .expect(422)                // or 400 — match your ValidationPipe config
+})
+
+it('returns 404 when the resource belongs to another tenant', async () => {
+  const { token } = await authenticate('other@example.com')
+  await request(app.getHttpServer())
+    .get('/v1/{resource}/someone-elses-id')
+    .set('Authorization', `Bearer ${token}`)
+    .expect(404)   // 404, not 403 — don't leak existence across tenants
+})
+```
+
+Write one test per behaviour. For conflict (duplicate / wrong state) add a 409 test.
+
+---
+
+## Status codes cheat sheet
+
+| Situation | Expected |
 |---|---|
-| Successful create | `.expect(201)` |
-| Successful read/update | `.expect(200)` |
-| Successful delete | `.expect(204)` |
-| Missing/invalid JWT | `.expect(401)` |
-| Permission missing | `.expect(403)` |
-| Resource not found / not in caller's org | `.expect(404)` |
-| Conflict (duplicate, still referenced) | `.expect(409)` |
-| Bad input (DTO validation) | `.expect(422)` |
+| Successful create | 201 |
+| Successful read / update | 200 |
+| Successful delete (no body) | 204 |
+| Missing / invalid token | 401 |
+| Valid token, permission missing | 403 |
+| Resource not found or not in caller's scope | 404 |
+| Conflict (duplicate, wrong state, still referenced) | 409 |
+| DTO validation failure | 422 (or 400 — match your project) |
 
-## Gotchas (the ones that have actually bitten this project)
+---
+
+## Gotchas (common failure patterns)
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `E11000 duplicate key` on permission/role | Test called `seed.seed()` AND `OnModuleInit` ran | Remove the explicit `seed.seed()` call. `onModuleInit` awaits internally. |
-| Test expects 422, gets 400 | `errorHttpStatusCode: 422` missing from `ValidationPipe` | Add it. |
-| `AppError` returns 500 | `GlobalExceptionFilter` not registered | `app.useGlobalFilters(new GlobalExceptionFilter())` |
-| `res.body.id` undefined, but the data is there | `ResponseTransformInterceptor` missing | Add it. Then assert on `res.body.data.id`. |
-| Test hangs in CI | `mongoose.disconnect()` missing in `afterAll` | Add it. Order: `app.close()` → `mongoose.disconnect()` → `mongo.stop()`. |
-| `JWT_SECRET is required` 500 | Env not set before `createTestingModule` | Set `process.env.JWT_SECRET` in `beforeAll` before the `Test.createTestingModule` call. |
-| Refresh-token tests fail to read cookie | `cookieParser` middleware not registered | `app.use(cookieParser())` |
-| `request(server)` lint errors everywhere | `@typescript-eslint/no-unsafe-argument` on `any` | Disable at file top: `/* eslint-disable @typescript-eslint/no-unsafe-argument */` |
-| Test passes locally, fails in CI with "address already in use" | Multiple test files share a `MongoMemoryServer` port | Each `*.integration.spec.ts` creates its OWN `MongoMemoryServer`. Don't share. |
+| `E11000 duplicate key` on seed data | Test called `seed()` AND `onModuleInit` auto-seeds | Remove the explicit `seed()` call. Let `onModuleInit` handle it. |
+| Validation returns 400, test expects 422 | `errorHttpStatusCode` not set in `ValidationPipe` | Add `errorHttpStatusCode: 422` to match your `main.ts` config. |
+| `AppError` subclass returns 500 | Exception filter not registered in harness | Add `app.useGlobalFilters(new YourExceptionFilter())` |
+| `res.body.id` is undefined but data is present | Response interceptor wraps in `{ data: ... }` | Assert on `res.body.data.id`, not `res.body.id`. |
+| Tests hang after completion | DB connection not closed in `afterAll` | Disconnect client + stop in-memory server in `afterAll`. |
+| Secret-related 500s | Env vars not set before `createTestingModule` | Set all `process.env.*` before calling `Test.createTestingModule`. |
+| Cookie-based auth fails | Cookie parser middleware missing | Add `app.use(cookieParser())` — mirror `main.ts`. |
+| `request(server)` lint errors everywhere | `app.getHttpServer()` returns `any` | Add `/* eslint-disable @typescript-eslint/no-unsafe-argument */` at file top. |
+| "Address already in use" in CI | Multiple spec files share one in-memory DB server | Each `*.integration.spec.ts` must create and stop its own DB server. |
 
-## Coverage targets per endpoint
-
-For each endpoint, write at minimum:
-
-1. **Happy path** — valid input, expected response shape
-2. **Auth** — no token returns 401; wrong-permission user returns 403
-3. **Validation** — at least one DTO failure mode returns 422
-4. **Cross-tenant isolation** — a user from another org returns 404 (not 403; we don't
-   leak existence)
-5. **Conflict path** (if applicable) — duplicate / wrong-state returns 409
-
-These five together hit the surface area that matters. Don't over-test the schema
-itself — Mongoose validators are not your job.
+---
 
 ## Verification
 
 ```bash
-pnpm test path/to/feature.integration.spec.ts
-# or full suite:
-pnpm test
+# Run just this test file
+npx jest path/to/feature.integration.spec.ts --runInBand
+
+# Full suite
+npx jest
+# or: pnpm test / yarn test — match the project's script
 ```
 
-If you see `MongoServerError: E11000 duplicate key error` on a fresh test run, jump
-straight to the seed gotcha row above — that's almost always it.
+`--runInBand` runs tests serially in the same process — useful for integration tests that
+share an in-memory DB to avoid port conflicts.

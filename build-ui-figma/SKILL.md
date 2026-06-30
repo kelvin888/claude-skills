@@ -1,14 +1,30 @@
 ---
 name: build-ui-figma
-description: Build a UI screen pixel-perfect from one or more Figma frames. Fetches all frames via the Figma MCP, extracts colors/typography/spacing/assets/states, downloads icon assets, then follows the build-ui-from-design method. Use when the user provides Figma URLs and asks to build, implement, or match a screen. For the full TradeAxis Next.js stack specifically, use tradeaxis-build-ui instead.
+description: Build a UI screen pixel-perfect from one or more Figma frames. Fetches all frames via the Figma MCP, extracts colors/typography/spacing/assets/states, downloads icon assets, then follows the build-ui-from-design method. Use when the user provides Figma URLs and asks to build, implement, or match a screen.
 ---
 
 # Build UI from Figma
 
 Figma adapter for the `build-ui-from-design` core method. Covers getting the real spec out
 of Figma; the build/verify discipline is in `build-ui-from-design` and `AGENTS.md`. For a
-project with a heavy established stack (BFF, data layer), prefer that project's own skill
-(e.g. `tradeaxis-build-ui`) which layers concrete file conventions on top of this.
+project with a heavy established stack (BFF, data layer), check CLAUDE.md for project-specific
+file conventions that layer on top of this.
+
+---
+
+## Step 0 — Creative Brief gate (hard requirement)
+
+Before fetching any Figma frame or writing any code, confirm an approved Creative Brief
+exists for this feature.
+
+**Brief exists** (in the conversation, a `.creative-brief.md` in the project root, or a
+prior `/creative-director` run): note the key creative intent, then proceed to Step 1.
+
+**No brief**: stop. Do not proceed. Say:
+> "There's no Creative Brief for this feature. A brief is required before building so the
+> output has creative intent, not just correct pixels. Running `/creative-director` now."
+
+Invoke `/creative-director` and wait for approval before continuing.
 
 ---
 

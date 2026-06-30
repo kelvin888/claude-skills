@@ -1,296 +1,256 @@
 ---
 name: nest-endpoint-scaffold
-description: Scaffold a new REST endpoint in a NestJS modular monolith following the TradeAxis backend conventions. Use when adding routes to an existing module (e.g. POST /v1/organizations/me/roles), when the user says "scaffold endpoint", "add endpoint", "new route", or when building out controllers/services/repositories together. Covers schema → repository → DTO → service → controller in one pass.
+description: Scaffold a new REST endpoint in a NestJS backend. Use when adding routes to an existing module, when the user says "scaffold endpoint", "add endpoint", "new route", or when building out controllers/services/repositories together. Covers model/schema → repository → DTO → service → controller in one pass. Stack-agnostic — reads CLAUDE.md first, asks about ORM/DB/auth if not found.
 ---
 
 # Nest Endpoint Scaffold
 
-Scaffolds a single REST endpoint end-to-end across the six layers, enforcing the
-project's architectural rules. Use this when adding any new route to an existing
-NestJS module.
+Scaffolds a single REST endpoint end-to-end across six layers. Use this when adding
+any new route to an existing NestJS module.
 
-## The 6-step recipe (always in this order)
+## Step 0 — Detect the stack before writing anything
 
-Each step has a single responsibility. Skipping a layer or merging two layers is a
-bug-magnet — controllers grow business logic, services grow HTTP awareness.
+Read `CLAUDE.md` / `agents.md` at the repo root (and the relevant module if it has one).
+Derive:
 
-1. **Schema** (`schemas/{name}.schema.ts`) — Mongoose model, prefixed collection
-2. **Repository** (`repositories/{name}.repository.ts`) — all Mongoose queries
-3. **DTO** (`dto/{verb}-{noun}.dto.ts`) — class-validator + `@ApiProperty`
-4. **Service** (`{module}/{feature}/{feature}.service.ts`) — pure business logic
-5. **Controller** (`{module}/{feature}/{feature}.controller.ts`) — HTTP only
+| Question | Where to look | If not found |
+|---|---|---|
+| ORM / DB driver | `package.json` dependencies | Ask: "Mongoose, Prisma, TypeORM, or other?" |
+| Database | Config files / driver name | Ask: "MongoDB, PostgreSQL, MySQL, SQLite, or other?" |
+| Auth pattern | Existing guards/decorators in the repo | Ask: "How is auth handled — JWT guards, session, API key, or other?" |
+| Error handling | Existing exception filters / AppError pattern | Ask: "What error classes/filters does the project use?" |
+| Path prefix | `main.ts` global prefix / existing controllers | Infer from existing routes |
+| Module structure | `src/modules/` layout | Match what's already there |
+
+Never hardcode project-specific shared utilities (auth decorators, error classes, path
+aliases). Read what the project actually uses, then reference those. If you can't find
+them, ask before writing.
+
+---
+
+## The 6-layer recipe (always in this order)
+
+Each layer has one responsibility. Merging layers is how controllers grow business logic
+and services grow HTTP awareness.
+
+1. **Model / Schema** — ORM model or Mongoose schema, named collection/table
+2. **Repository** — all database queries, no business rules
+3. **DTO** — input validation + API documentation shape
+4. **Service** — pure business logic, throws typed errors
+5. **Controller** — HTTP parsing only, delegates to service
 6. **Integration test** — invoke the `nest-integration-test` skill
 
-## Layer responsibilities (the rule)
-
 ```
-Controller   →   parses HTTP, calls service, returns service result. NO logic.
-Service      →   business rules, validation beyond DTO, throws AppError. NO Mongoose.
-Repository   →   Mongoose queries only. NO business rules. NO HTTP.
+Controller   →   parses HTTP, calls service, returns result. NO logic.
+Service      →   business rules, throws typed errors. NO ORM queries.
+Repository   →   ORM/DB queries only. NO business rules. NO HTTP.
 ```
 
-If a controller does anything more than `return this.service.x(args)`, it's wrong.
-If a service imports `mongoose` or `Model`, it's wrong.
-If a repository throws `AppError`, it's probably wrong.
+---
 
-## Step 1 — Schema
+## Step 1 — Model / Schema
+
+### Mongoose (MongoDB)
 
 ```typescript
-// src/modules/{module}/schemas/role.schema.ts
+// src/modules/{module}/schemas/{name}.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
 import { Document } from 'mongoose'
 
-@Schema({ timestamps: true, collection: 'identity_roles' }) // ALWAYS prefixed
-export class Role {
+@Schema({ timestamps: true, collection: '{prefix}_{noun-plural}' })
+export class {Name} {
   @Prop({ required: true }) name: string
-  @Prop({ required: true }) group: string
-  @Prop({ type: String, default: null }) organizationId: string | null
-  @Prop({ type: [String], default: [] }) permissions: string[]
-  @Prop({ default: false }) isSystem: boolean
   @Prop({ type: Date, default: null }) deletedAt: Date | null
 }
 
-export type RoleDocument = Role & Document
-export const RoleSchema = SchemaFactory.createForClass(Role)
+export type {Name}Document = {Name} & Document
+export const {Name}Schema = SchemaFactory.createForClass({Name})
 ```
 
-**Rules:**
-- `collection: '{module-prefix}_{noun-plural}'` is mandatory
-- `timestamps: true` is mandatory
-- Union types like `Date | null` need explicit `@Prop({ type: Date, default: null })`
-- Cross-module IDs are `String`, never `ObjectId`
-- Money is integer minor units; the unit goes in the field name (`amountCents`)
-- Soft-delete with `deletedAt: Date | null`
+**Rules:** prefix the collection name, always `timestamps: true`, soft-delete with
+`deletedAt: Date | null`, cross-module IDs as `String` not `ObjectId`.
+
+### Prisma (PostgreSQL / MySQL / SQLite)
+
+```prisma
+// prisma/schema.prisma — add to existing schema
+model {Name} {
+  id        String   @id @default(cuid())
+  name      String
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+```
+
+### TypeORM (PostgreSQL / MySQL)
+
+```typescript
+// src/modules/{module}/entities/{name}.entity.ts
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm'
+
+@Entity('{table_name}')
+export class {Name} {
+  @PrimaryGeneratedColumn('uuid') id: string
+  @Column() name: string
+  @Column({ nullable: true }) deletedAt: Date | null
+  @CreateDateColumn() createdAt: Date
+  @UpdateDateColumn() updatedAt: Date
+}
+```
+
+---
 
 ## Step 2 — Repository
 
+The repository isolates all DB access. Services never import the ORM model directly.
+
 ```typescript
-// src/modules/{module}/repositories/role.repository.ts
+// src/modules/{module}/repositories/{name}.repository.ts
 import { Injectable } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
-import { Model } from 'mongoose'
-import { Role, RoleDocument } from '../schemas/role.schema'
+// Import your ORM model/client here based on the project's pattern
 
 @Injectable()
-export class RoleRepository {
-  constructor(@InjectModel(Role.name) private readonly model: Model<RoleDocument>) {}
+export class {Name}Repository {
+  // Mongoose: constructor(@InjectModel({Name}.name) private model: Model<{Name}Document>) {}
+  // Prisma:   constructor(private prisma: PrismaService) {}
+  // TypeORM:  constructor(@InjectRepository({Name}) private repo: Repository<{Name}>) {}
 
-  findById(id: string) {
-    return this.model.findById(id).lean()
-  }
-
-  listForOrg(organizationId: string) {
-    return this.model
-      .find({ organizationId, deletedAt: null })
-      .sort({ createdAt: -1 })
-      .lean()
-  }
-
-  async createCustom(input: { ... }) {
-    return this.model.create({ ...input, isSystem: false })
-  }
+  findById(id: string) { /* ... */ }
+  list(filters?: unknown) { /* ... */ }
+  create(input: unknown) { /* ... */ }
+  softDelete(id: string) { /* ... */ }
 }
 ```
 
 **Rules:**
-- One repository per schema. Repositories never call other repositories.
-- Always use `.lean()` for reads — typed plain objects, no Mongoose document overhead
-- Never query another module's collections. If you need cross-module data, call the
-  other module's contract (`MODULE_CONTRACT` token) from the service layer.
+- One repository per model. Repositories never call other repositories.
+- For reads, return plain objects (`.lean()` in Mongoose, Prisma returns plain objects by default).
+- Never query another module's tables/collections. Cross-module data goes through the other
+  module's service or contract token, called from the service layer.
+
+---
 
 ## Step 3 — DTO
 
 ```typescript
-// src/modules/{module}/dto/create-role.dto.ts
+// src/modules/{module}/dto/create-{name}.dto.ts
 import { ApiProperty } from '@nestjs/swagger'
-import { IsArray, IsString, Length } from 'class-validator'
+import { IsString, Length } from 'class-validator'
 
-export class CreateRoleDto {
-  @ApiProperty({ example: 'Procurement Officer', minLength: 2, maxLength: 80 })
+export class Create{Name}Dto {
+  @ApiProperty({ example: 'My value', minLength: 2, maxLength: 80 })
   @IsString()
   @Length(2, 80)
   name!: string
-
-  @ApiProperty({ example: ['procurement.rfq.create', 'procurement.rfq.view'] })
-  @IsArray()
-  @IsString({ each: true })
-  permissions!: string[]
 }
 ```
 
 **Rules:**
-- Every field gets `@ApiProperty` — non-negotiable, CI fails otherwise
-- Use `!` (definite assignment) on required fields — strict mode enforces it
-- Boundary validation only (lengths, formats). Business rules belong in the service.
-- Response DTOs are separate types (`{Name}SummaryDto`) — never return Mongoose docs
+- Every field gets `@ApiProperty` if the project uses Swagger — check `package.json` for
+  `@nestjs/swagger`. If present, it's mandatory.
+- Use `!` (definite assignment) on required fields in strict mode.
+- Boundary validation only (lengths, formats, types). Business rules belong in the service.
+- Response DTOs are separate types — never return ORM documents/entities directly.
+
+---
 
 ## Step 4 — Service
 
 ```typescript
 // src/modules/{module}/{feature}/{feature}.service.ts
 import { Injectable } from '@nestjs/common'
-import { ConflictError, ForbiddenError, NotFoundError } from '@/shared/lib/api-error'
-import { RoleRepository } from '../repositories/role.repository'
-import type { CreateRoleDto } from '../dto/create-role.dto'
-import type { RoleSummaryDto } from '../dto/role-summary.dto'
+import { {Name}Repository } from '../repositories/{name}.repository'
+import type { Create{Name}Dto } from '../dto/create-{name}.dto'
 
 @Injectable()
-export class RolesService {
-  constructor(private readonly roles: RoleRepository) {}
+export class {Name}Service {
+  constructor(private readonly repo: {Name}Repository) {}
 
-  async create(
-    actor: { organizationId: string; group: string },
-    dto: CreateRoleDto,
-  ): Promise<RoleSummaryDto> {
-    // 1. Validate business rules (subset, group match, etc.)
+  async create(actor: { id: string }, dto: Create{Name}Dto) {
+    // 1. Validate business rules
     // 2. Mutate via repository
-    // 3. Map document → DTO via `toRoleSummary(doc, idOf(doc))`
+    // 3. Map document/entity → response DTO
   }
 }
 ```
 
 **Rules:**
-- Throw `AppError` subclasses only — never `new Error()`, never `throw 'string'`
-  - `NotFoundError('Role')` → 404
-  - `ConflictError('Role still assigned to N users')` → 409
-  - `ForbiddenError('Role contains permissions outside your group')` → 403
-  - `ValidationError(...)` → 422 (boundary errors; DTO handles most)
-- Services orchestrate other services/repositories via DI. No `new RoleRepository()`.
-- Cross-module calls go through `@Inject(MODULE_CONTRACT)`, never the concrete class.
-- Use the `idOf(doc)` helper for any `_id` extraction (see below).
+- Throw the project's typed error classes (check existing code for the pattern —
+  e.g. `NotFoundException`, `ConflictException`, custom `AppError` subclasses, etc.).
+  Never `throw new Error('string')` for expected business errors.
+- Services orchestrate via DI only. No `new Repository()`.
+- Cross-module calls go through the other module's exported service or contract token.
 
-### The `idOf` helper (copy verbatim into each service file that needs it)
-
-```typescript
-function idOf(doc: unknown): string {
-  if (typeof doc !== 'object' || doc === null || !('_id' in doc)) {
-    throw new Error('document has no _id')
-  }
-  const id = (doc as { _id: unknown })._id
-  if (id === undefined || id === null) throw new Error('document has no _id')
-  if (typeof id === 'string') return id
-  if (typeof id === 'object' && 'toString' in id && typeof id.toString === 'function') {
-    return (id as { toString: () => string }).toString()
-  }
-  throw new Error('document _id is not stringifiable')
-}
-```
-
-Mongoose `.lean()` returns objects whose `_id` is `unknown` in the typings; this helper
-narrows it. Don't reach for `as string` shortcuts.
+---
 
 ## Step 5 — Controller
 
 ```typescript
 // src/modules/{module}/{feature}/{feature}.controller.ts
-import { Body, Controller, Post, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
-import { CurrentUser } from '@/shared/decorators/current-user.decorator'
-import { RequirePermissions } from '@/shared/decorators/permissions.decorator'
-import { JwtAuthGuard } from '@/shared/guards/jwt-auth.guard'
-import { PermissionsGuard } from '@/shared/guards/permissions.guard'
-import type { JWTPayload } from '@/shared/types/jwt'
-import { CreateRoleDto } from '../dto/create-role.dto'
-import { RoleSummaryDto } from '../dto/role-summary.dto'
-import { RolesService } from './roles.service'
+import { Body, Controller, Get, Post, UseGuards, Param } from '@nestjs/common'
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger'
+// Import the project's auth guard(s), current-user decorator, and permission decorator
+// Read the existing controllers to find the exact imports used in this project
 
-@ApiTags('organisations')
-@ApiBearerAuth()
-@Controller('organizations/me/roles')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-export class RolesController {
-  constructor(private readonly roles: RolesService) {}
+@ApiTags('{module}')
+@Controller('{resource-path}')   // no leading slash; global prefix is set in main.ts
+// @UseGuards(...)               // match the auth pattern the project already uses
+export class {Name}Controller {
+  constructor(private readonly service: {Name}Service) {}
 
   @Post()
-  @RequirePermissions('org.roles.create')
-  @ApiOperation({ summary: 'Create a custom role in the caller organisation' })
-  @ApiResponse({ status: 201, type: RoleSummaryDto })
-  create(@CurrentUser() user: JWTPayload, @Body() dto: CreateRoleDto) {
-    return this.roles.create({ organizationId: user.organizationId, group: user.group }, dto)
+  @ApiOperation({ summary: 'Create a {name}' })
+  @ApiResponse({ status: 201 })
+  create(@Body() dto: Create{Name}Dto) {
+    return this.service.create(dto)
   }
 }
 ```
 
 **Rules:**
-- Permissions live at the controller (`@RequirePermissions(...)`), never inside services.
-  This keeps the auth surface visible in one place.
-- Every endpoint needs `@ApiOperation` AND `@ApiResponse` — CI enforces it.
-- `@Controller('organizations/...')` — no leading slash, no `v1/` (global prefix handles it).
-- Use `@CurrentUser()` to get the JWT payload; don't read `req.user` directly.
-- Return the service result. Never `res.json(...)`. The `ResponseTransformInterceptor`
-  wraps it in `{ data }`.
+- Copy the guard/decorator pattern from an existing controller in the project — don't invent it.
+- Controllers return the service result. Never `res.json(...)`.
+- Every endpoint needs `@ApiOperation` + `@ApiResponse` if the project uses Swagger.
+- No business logic here. If you're writing an `if` in a controller, it belongs in the service.
+
+---
 
 ## Step 6 — Module wiring
 
-If the feature is brand-new, register its controller/service/repository in the module
-file. If extending an existing feature, the wiring usually exists.
+Register the new controller, service, and repository in the module:
 
 ```typescript
-// src/modules/identity/identity.module.ts
+// src/modules/{module}/{module}.module.ts
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Role.name, schema: RoleSchema }, ...])],
-  controllers: [..., RolesController],
-  providers: [..., RolesService, RoleRepository],
-  exports: [IDENTITY_CONTRACT],
+  imports: [
+    // Mongoose: MongooseModule.forFeature([{ name: {Name}.name, schema: {Name}Schema }])
+    // TypeORM:  TypeOrmModule.forFeature([{Name}])
+    // Prisma:   no extra import needed — inject PrismaService directly
+  ],
+  controllers: [..., {Name}Controller],
+  providers:   [..., {Name}Service, {Name}Repository],
 })
-export class IdentityModule {}
+export class {Module}Module {}
 ```
 
-## Step 7 — Permission codes
+---
 
-If the endpoint introduces a new permission, register it in
-`src/modules/{module}/seeds/permission-registry.ts` AND grant it to the relevant
-default roles in `default-role-permissions.ts`. Bump the seed migration if the seeder
-uses versioning.
+## Step 7 — Permissions / roles (if the project uses them)
 
-Format: `{module}.{resource}.{action}` — e.g. `org.roles.create`, `payment.escrow.release`.
+If the endpoint introduces a new permission or role requirement, check whether the project
+has a permission registry or seed file and register it there. Ask the author if unsure
+where permissions are managed.
 
-## Response envelope (what the client sees)
-
-```json
-// Success
-{ "data": { "id": "...", "name": "...", ... } }
-
-// List with pagination
-{ "data": [ ... ], "meta": { "page": 1, "limit": 20, "total": 43, "totalPages": 3 } }
-
-// Error
-{ "error": { "code": "CONFLICT", "message": "Role still assigned to 3 users" } }
-```
-
-The interceptor wraps successes; the filter formats errors. Don't construct these
-shapes manually.
-
-## Status codes (the ones that bite)
-
-| Code | When |
-|---|---|
-| 200 | Read or update |
-| 201 | Create |
-| 204 | Delete (no body) |
-| 401 | Missing/invalid JWT |
-| 402 | OTP required (escrow >$5k) |
-| 403 | JWT valid, permission missing |
-| 404 | Resource not found OR not in caller's org (don't leak existence) |
-| 409 | Conflict (duplicate, wrong state, still referenced) |
-| 422 | Validation error |
+---
 
 ## Final checks before opening a PR
 
-- [ ] Collection name is prefixed (`identity_*`, `payment_*`, etc.)
-- [ ] Schema has `timestamps: true`
-- [ ] Repository uses `.lean()` and never queries another module's collections
-- [ ] Service throws `AppError` subclasses only
-- [ ] Controller has `@ApiOperation` + `@ApiResponse` on every method
-- [ ] Permission code follows `{module}.{resource}.{action}`
-- [ ] `idOf(doc)` used for every `_id` extraction
+- [ ] Model/schema has a prefixed collection/table name and timestamps
+- [ ] Repository uses the project's lean/plain-object pattern for reads
+- [ ] Repository never queries another module's data
+- [ ] Service throws typed error classes, not raw `Error`
+- [ ] Controller has `@ApiOperation` + `@ApiResponse` on every method (if project uses Swagger)
+- [ ] No `new ClassName()` in services or controllers — everything injected via DI
 - [ ] Integration test exists (invoke `nest-integration-test` skill)
-- [ ] `pnpm build && pnpm lint && pnpm test` all green
-
-## Verification incantation (run after every scaffold)
-
-```bash
-pnpm build && pnpm lint && pnpm lint:fix && pnpm test
-# then smoke test:
-pnpm start:dev   # in another terminal: curl the new endpoint
-```
+- [ ] `build`, `lint`, and `test` all green

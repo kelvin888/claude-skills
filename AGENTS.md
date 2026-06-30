@@ -33,3 +33,21 @@ If a change alters component shape (label casing, a field split in two, a widget
 stateful), update the affected test assertions to match the new correct behavior and run
 the suite green before finishing. Remove dead/boilerplate tests you encounter rather than
 leaving the suite red.
+
+## Creative direction before any UI work
+Never build a UI feature without an approved Creative Brief. When any design or UI task
+arrives — whether or not the user uses those words — check whether a Creative Brief exists
+(in the conversation or as a `.creative-brief.md` in the project).
+- **No brief exists**: do not proceed to implementation. Invoke `/creative-director` and
+  wait for the brief to be approved before writing a single line of component code.
+- **Brief exists**: reference it during the build to ensure the implementation reflects
+  the creative intent, not just the pixel values.
+"It matches the Figma/Stitch" is not done — it must also reflect the approved creative
+direction. Pixel-perfect on a mediocre design is still a mediocre product.
+
+## Follow the feature workflow for all new work
+Every new feature and every new project must pass through the full pipeline before
+implementation begins: creative direction (if UI) → spec → stress test → issues →
+implement → review → deploy. Skipping phases is not a shortcut — it is the source of
+generic output and rework. If someone asks you to "just build it", ask for the spec first.
+Reference `/feature-workflow` for the complete gate sequence.

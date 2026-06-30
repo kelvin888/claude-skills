@@ -15,6 +15,25 @@ See also the repo's `AGENTS.md`: "Verify, don't confirm" and "No raw hex — use
 
 ---
 
+## Step 0 — Creative Brief gate (hard requirement)
+
+Before touching any design spec or writing any code, confirm an approved Creative Brief
+exists for this feature.
+
+**Brief exists** (in the conversation, a `.creative-brief.md` in the project root, or an
+approved output from a prior `/creative-director` run): summarise the key creative intent
+in one sentence, then proceed. Keep it in view while building — it is the north star, not
+the Figma file.
+
+**No brief**: stop here. Do not eyeball the design and "just build it." Say:
+> "There's no Creative Brief for this feature. A brief is required before building so the
+> output has creative intent, not just correct pixels. Running `/creative-director` now."
+
+Then invoke `/creative-director` and wait for the brief to be approved before continuing
+to Step 1. This is the gate that separates distinctive products from generic SaaS clones.
+
+---
+
 ## Step 1 — Get the REAL design spec, don't eyeball
 A screenshot hides exact radius, padding, fill, borders, focus/hover/error states, and
 whether a control is one element or several joined ones. Get the underlying spec via the

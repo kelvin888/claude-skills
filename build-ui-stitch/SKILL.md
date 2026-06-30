@@ -12,6 +12,22 @@ the screenshot. This skill covers getting it; the build/verify discipline is in
 
 ---
 
+## Step 0 — Creative Brief gate (hard requirement)
+
+Before fetching any Stitch screen or writing any code, confirm an approved Creative Brief
+exists for this feature.
+
+**Brief exists** (in the conversation, a `.creative-brief.md` in the project root, or a
+prior `/creative-director` run): note the key creative intent, then proceed to Step 1.
+
+**No brief**: stop. Do not proceed. Say:
+> "There's no Creative Brief for this feature. A brief is required before building so the
+> output has creative intent, not just correct pixels. Running `/creative-director` now."
+
+Invoke `/creative-director` and wait for approval before continuing.
+
+---
+
 ## Step 1 — Find the right project and board
 Stitch accounts often have many projects, several titled similarly. Confirm which board
 is the source of truth before fetching:

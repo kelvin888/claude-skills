@@ -7,6 +7,12 @@ Reusable agent skills + global working habits, portable across projects and mach
   no-raw-hex, read-the-real-source, keep-the-suite-green). Claude Code can import it from a
   one-line `CLAUDE.md` (`@AGENTS.md`); other agents can read it directly.
 
+## Creative direction
+- **[creative-director](creative-director/SKILL.md)** — act as the creative director of an
+  award-winning interactive agency: interview → challenge → gated pipeline (brief → concepts
+  → storyboard → motion → visual → engineering brief), orchestrating specialist roles. Hands
+  off a buildable Engineering Brief (feeds `build-ui-from-design`).
+
 ## Building UI from designs (layered)
 - **[build-ui-from-design](build-ui-from-design/SKILL.md)** — the platform-agnostic core
   method: real spec → tokens → real structure → bug-hunt verification → green tests.
